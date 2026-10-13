@@ -71,23 +71,23 @@ The paths below are examples; use whatever fits your setup.
 | path | what |
 | --- | --- |
 | `/opt/popmap` | checkout of this repository, with a venv in `.venv/` |
-| `/var/www/popmap` | web root: site code + generated `tiles/` and `data/` |
+| `/var/www/popmap` | web root: site code + generated `tiles/` and `data/`, owned by `www-data:www-data` |
 | `/var/lib/popmap` | downloads, lock file and `update.log` |
 
 1. Get the code and install the dependencies:
    ```bash
-   git clone <repo-url> /opt/popmap
+   sudo git clone <repo-url> /opt/popmap
    cd /opt/popmap
-   python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+   sudo python3 -m venv .venv && sudo .venv/bin/pip install -r requirements.txt
    ```
 2. Copy the site code to the web root and build the data once:
    ```bash
-   ./deploy/deploy.sh /var/www/popmap
-   ./deploy/update-data.sh
+   sudo ./deploy/deploy.sh /var/www/popmap
+   sudo ./deploy/update-data.sh
    ```
 3. Schedule the data updates with cron, weekly or monthly. Either install
-   `deploy/popmap-update.cron` in `/etc/cron.d/` (set the user and path in it), or add
-   this to a crontab:
+   `deploy/popmap-update.cron` in `/etc/cron.d/` (check the path in it), or add this to
+   root's crontab (`sudo crontab -e`):
    ```
    17 4 * * 1  /opt/popmap/deploy/update-data.sh > /dev/null
    ```
@@ -95,12 +95,18 @@ The paths below are examples; use whatever fits your setup.
    config for nginx; with any other server, serve `meta.json` and `countries.json` with
    `Cache-Control: no-cache`. Use HTTPS for public access.
 
-The user running the scripts needs write access to the web root and the work dir.
+**Ownership:** everything in the web root is owned by `www-data:www-data`, also when the
+scripts (or cron) run as root: new files get that owner before they go live, and
+`update-data.sh` fixes any stray files afterwards. Files are `644`, folders `755`. Use
+another owner with `POPMAP_WEB_OWNER=user:group`, or `POPMAP_WEB_OWNER=` to leave
+ownership alone. Changing owners needs root; run as `www-data` itself works too.
+
 Paths can be changed with `POPMAP_WEB_DIR`, `POPMAP_WORK_DIR`, `POPMAP_VENV` and
 `POPMAP_LOG` (environment variables or `/etc/default/popmap`).
 
-**Code updates:** `git pull && ./deploy/deploy.sh /var/www/popmap`. This leaves the
-generated data alone. From another machine: `./deploy/deploy.sh user@server [/path/to/webroot]`.
+**Code updates:** `sudo git pull && sudo ./deploy/deploy.sh /var/www/popmap`. This leaves
+the generated data alone. From another machine: `./deploy/deploy.sh user@server [/path/to/webroot]`
+(the ssh user needs passwordless sudo for `rsync`, or use `root@server`).
 
 ### How the data updates work
 
@@ -117,8 +123,8 @@ The live site is never touched by a run that fails halfway. Tile URLs carry
 `?v=<version>`, so visitors get the new data straight away even if tiles are cached.
 
 ```bash
-./deploy/update-data.sh --check   # exit code 10 = update available
-./deploy/update-data.sh --force   # rebuild anyway
+sudo ./deploy/update-data.sh --check   # exit code 10 = update available
+sudo ./deploy/update-data.sh --force   # rebuild anyway
 ```
 
 ### Notes for public use

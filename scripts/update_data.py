@@ -10,6 +10,10 @@ Keeps the population data on the server up to date. Meant to run from cron.
 Nothing that is live gets touched until a new build has finished, so a failed run
 leaves the site as it was. Runs never overlap (lock file in the work dir).
 
+When run as root, everything written to the web dir is given to --web-owner
+(default www-data:www-data) before it goes live, so the web server never sees
+root-owned files.
+
 Disk: the work dir needs ~10 GB during a rebuild (2.4 GB download + 6.7 GB unpacked),
 the web dir ~2.6 GB per tile set (two sets exist briefly during the switch).
 
@@ -21,9 +25,11 @@ Usage:
 import argparse
 import fcntl
 import glob
+import grp
 import gzip
 import json
 import os
+import pwd
 import re
 import shutil
 import subprocess
@@ -59,6 +65,24 @@ def latest_release():
     if not found:
         raise RuntimeError("no kontur_population_YYYYMMDD.gpkg.gz resource found on HDX")
     return max(found)
+
+
+def parse_owner(spec):
+    """'user:group' -> (uid, gid), or None when not running as root (chown impossible)."""
+    if os.geteuid() != 0 or not spec:
+        return None
+    user, _, group = spec.partition(":")
+    return pwd.getpwnam(user).pw_uid, grp.getgrnam(group or user).gr_gid
+
+
+def chown(path, owner, recursive=False):
+    if not owner:
+        return
+    os.chown(path, *owner, follow_symlinks=False)
+    if recursive and os.path.isdir(path) and not os.path.islink(path):
+        for root, dirs, files in os.walk(path):
+            for name in dirs + files:
+                os.chown(os.path.join(root, name), *owner, follow_symlinks=False)
 
 
 def published_version(web_dir):
@@ -107,7 +131,7 @@ def run(*cmd):
     subprocess.run(cmd, check=True)
 
 
-def switch_tiles(web_dir, new_dir):
+def switch_tiles(web_dir, new_dir, owner):
     """Point <web-dir>/tiles at new_dir (relative symlink, swapped atomically)."""
     link = os.path.join(web_dir, "tiles")
     if os.path.isdir(link) and not os.path.islink(link):
@@ -121,6 +145,7 @@ def switch_tiles(web_dir, new_dir):
     if os.path.lexists(tmp):
         os.remove(tmp)
     os.symlink(os.path.basename(new_dir), tmp)
+    chown(tmp, owner)
     os.replace(tmp, link)
 
 
@@ -131,7 +156,7 @@ def remove_old_tiles(web_dir, keep):
             shutil.rmtree(d)
 
 
-def update_tiles(args, version, url, size):
+def update_tiles(args, version, url, size, owner):
     gz = os.path.join(args.work_dir, f"kontur_population_{version}.gpkg.gz")
     gpkg = gz[:-3]
     download(url, gz, size)
@@ -145,10 +170,11 @@ def update_tiles(args, version, url, size):
     with open(os.path.join(building, "meta.json")) as f:
         if not json.load(f).get("variants"):
             raise RuntimeError("build produced an empty meta.json")
+    chown(building, owner, recursive=True)
     shutil.rmtree(final, ignore_errors=True)
     os.rename(building, final)
 
-    switch_tiles(args.web_dir, final)
+    switch_tiles(args.web_dir, final, owner)
     log(f"tiles now point to {final}")
     remove_old_tiles(args.web_dir, final)
 
@@ -168,10 +194,15 @@ def main():
     ap.add_argument("--check", action="store_true", help="only report whether an update is available")
     ap.add_argument("--keep-download", action="store_true", help="keep the .gpkg.gz after a successful build")
     ap.add_argument("--skip-countries", action="store_true")
+    ap.add_argument("--web-owner", default=os.environ.get("POPMAP_WEB_OWNER", "www-data:www-data"),
+                    help="user:group for files in the web dir when running as root ('' = leave as is)")
     args = ap.parse_args()
+    owner = parse_owner(args.web_owner)
 
     os.makedirs(args.work_dir, exist_ok=True)
     os.makedirs(os.path.join(args.web_dir, "data"), exist_ok=True)
+    chown(args.web_dir, owner)
+    chown(os.path.join(args.web_dir, "data"), owner)
     lock = open(os.path.join(args.work_dir, "update.lock"), "w")
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -186,13 +217,15 @@ def main():
         return 0 if current == version else 10
 
     if current != version or args.force:
-        update_tiles(args, version, url, size)
+        update_tiles(args, version, url, size, owner)
     else:
         log("tiles are up to date")
 
     if not args.skip_countries:
-        run(sys.executable, os.path.join(HERE, "build_countries.py"),
-            "--out", os.path.join(args.web_dir, "data", "countries.json"))
+        countries = os.path.join(args.web_dir, "data", "countries.json")
+        run(sys.executable, os.path.join(HERE, "build_countries.py"), "--out", countries + ".new")
+        chown(countries + ".new", owner)
+        os.replace(countries + ".new", countries)
     log("done")
     return 0
 

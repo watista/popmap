@@ -1,7 +1,8 @@
 # Checks for a new Kontur Population release and rebuilds the tiles if there is one.
 # Install:  sudo cp deploy/popmap-update.cron /etc/cron.d/popmap-update
 # (files in /etc/cron.d must not be group/world-writable and must not contain a dot in
-#  their name). Adjust the user and repo path below to your setup.
+#  their name). Adjust the repo path below to your setup. It runs as root; the files it
+#  writes to the web dir are still owned by POPMAP_WEB_OWNER (default www-data:www-data).
 #
 # The check itself is a single API call; Kontur publishes a new release about once a
 # year, so a weekly or monthly schedule is plenty. Pick one:
@@ -11,4 +12,4 @@ SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # MAILTO=you@example.com     # uncomment to get the output mailed on every run
 
-17 4 * * 1  popmap  /opt/popmap/deploy/update-data.sh > /dev/null
+17 4 * * 1  root  /opt/popmap/deploy/update-data.sh > /dev/null
