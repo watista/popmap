@@ -1,0 +1,3 @@
+# Python dependencies for scripts/ (tile building and the data updater)
+h3>=4.0,<5
+numpy>=1.26

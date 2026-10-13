@@ -1,0 +1,36 @@
+# --- generated data (built by scripts/, refreshed on the server by cron) ---
+# tiles: ~2.6 GB of .bin files per dataset version
+/web/tiles
+/web/tiles-*
+/web/tiles.new
+/web/data/countries.json
+/web/data/*.tmp
+# Kontur source downloads and unpacked GeoPackages
+/data/
+*.gpkg
+*.gpkg.gz
+*.part
+*.bin
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# --- logs / runtime ---
+*.log
+update.lock
+
+# --- editors / OS ---
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- local Claude Code settings (machine-specific paths) ---
+.claude/

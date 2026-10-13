@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>World Population Distribution</title>
+  <meta name="description" content="Interactive 3D globe of population density, based on Kontur Population.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="vendor/maplibre-gl.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="stars" aria-hidden="true"></div>
+  <div id="map"></div>
+
+  <header class="panel" id="brand">
+    <h1>World Population Distribution</h1>
+    <p class="sub">Where the world's 8 billion people live</p>
+
+    <div class="search">
+      <input id="search" type="search" placeholder="Fly to a place…" autocomplete="off" aria-label="Search for a place">
+      <ul id="search-results" role="listbox" hidden></ul>
+    </div>
+
+    <label class="field">
+      <span>Country</span>
+      <select id="country"><option value="">Choose a country…</option></select>
+    </label>
+    <div id="country-info" hidden></div>
+  </header>
+
+  <aside class="panel" id="settings">
+    <button id="settings-toggle" class="icon-btn" aria-expanded="true" title="Settings">⚙</button>
+    <div id="settings-body">
+      <label class="field">
+        <span>Colour palette</span>
+        <select id="palette"></select>
+      </label>
+      <label class="field">
+        <span>Number of spikes <output id="spikes-val"></output></span>
+        <input id="spikes" type="range" min="0" max="4" step="0.01" value="2">
+        <span class="range-ends"><small>Few</small><small>Many</small></span>
+      </label>
+      <label class="field">
+        <span>Height <output id="height-val">1×</output></span>
+        <input id="height" type="range" min="-2" max="2" step="0.05" value="0">
+      </label>
+      <label class="field">
+        <span>Height scale</span>
+        <select id="mode">
+          <option value="linear">Linear (true to life)</option>
+          <option value="sqrt">Square root (balanced)</option>
+          <option value="log">Logarithmic (everything visible)</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>View</span>
+        <select id="projection">
+          <option value="auto">Globe → flat when zooming in</option>
+          <option value="globe">Always globe</option>
+          <option value="flat">Always flat</option>
+        </select>
+      </label>
+      <label class="check"><input id="rotate" type="checkbox" checked> Slowly rotate</label>
+      <label class="check"><input id="tilt" type="checkbox" checked> Tilt when zooming in</label>
+      <label class="check"><input id="labels" type="checkbox" checked> Place names</label>
+      <label class="check"><input id="roads" type="checkbox" checked> Roads and borders</label>
+    </div>
+  </aside>
+
+  <footer class="panel" id="legend">
+    <div class="legend-title">People per km²</div>
+    <div id="legend-bar"></div>
+    <div class="legend-scale"><span id="legend-lo"></span><span id="legend-hi"></span></div>
+    <div id="legend-res"></div>
+  </footer>
+
+  <div id="source">
+    Source: <a href="https://data.humdata.org/dataset/kontur-population-dataset" target="_blank" rel="noopener" id="source-name">Kontur Population</a>
+    <span>(CC BY 4.0)</span>
+  </div>
+
+  <div id="tooltip" hidden></div>
+  <div id="loading">Populating the globe…</div>
+
+  <script src="vendor/maplibre-gl.js"></script>
+  <script src="vendor/deck.gl.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
