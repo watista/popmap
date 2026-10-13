@@ -29,87 +29,78 @@ deploy/
 ```
 
 **Generated data is not in git.** `web/tiles/`, `web/data/countries.json` and the Kontur
-downloads (`data/`) are ignored: the tiles alone are ~2.6 GB. Build them locally (below),
-and on the server they're built and kept up to date by a cron job.
+downloads are ignored (the tiles alone are ~2.6 GB). You build them yourself with the
+scripts below; on a server a cron job keeps them up to date.
+
+## Requirements
+
+- A Unix-like system (Linux, macOS) for the data scripts
+- Python 3.10+ with the packages in `requirements.txt`
+- ~15 GB free disk and ~4 GB RAM while building the data
+- For a server: any web server that can serve static files, and cron
 
 ## Run locally
 
-Build the data first (next section), then:
-
 ```bash
-wsl -e python3 -m http.server 8765 --directory /mnt/c/Users/Wouter/Documents/popmap/web
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+
+# download the newest Kontur release (2.4 GB) and build tiles + country list
+.venv/bin/python scripts/update_data.py --web-dir web --work-dir work
+
+# serve the site
+python3 -m http.server 8000 --directory web
 ```
 
-Then open http://localhost:8765.
+Then open http://localhost:8000. Run the `update_data.py` line again at any time to
+pick up a new release. Add `--keep-download` to keep the 2.4 GB source file in `work/`.
 
-## Build the data
-
-The easiest way is the same updater the server uses. It downloads the newest Kontur
-release (2.4 GB) and builds the tiles in about a minute. Use the WSL disk for the work
-dir, because it's much faster than `/mnt/c`:
+To build from a GeoPackage you already have:
 
 ```bash
-python3 -m venv ~/popmap-venv && ~/popmap-venv/bin/pip install -r requirements.txt
-~/popmap-venv/bin/python scripts/update_data.py --web-dir web --work-dir ~/popmap-work --keep-download
-```
-
-Locally `web/tiles` then becomes a symlink to `web/tiles-<version>/`. To build by hand
-from a GeoPackage you already have:
-
-```bash
-~/popmap-venv/bin/python scripts/build_tiles.py --gpkg ~/popmap-work/kontur_population_20231101.gpkg --out web
-~/popmap-venv/bin/python scripts/build_countries.py --out web/data/countries.json
+.venv/bin/python scripts/build_tiles.py --gpkg path/to/kontur_population_YYYYMMDD.gpkg --out web
+.venv/bin/python scripts/build_countries.py --out web/data/countries.json
 ```
 
 Which H3 resolution belongs to which zoom level is set by `ZOOM_RES` in `scripts/build_tiles.py`. `VARIANTS` sets how many resolution steps coarser (or finer) each variant is. Thickness and height per variant are in `SPIKES` in `web/app.js`; the colour palettes are in `PALETTES`.
 
-## Deploy to the Ubuntu server
+## Run on a server
 
-The server holds a git checkout (code + scripts) and a separate web root that nginx
-serves. The cron job writes the data straight into the web root.
+The paths below are examples; use whatever fits your setup.
 
 | path | what |
 | --- | --- |
-| `/opt/popmap` | git checkout, Python venv in `.venv/` |
-| `/var/www/popmap` | web root: site code (from `deploy.sh`) + `tiles/` and `data/` (from cron) |
-| `/var/lib/popmap` | downloads, lock file and `update.log` (~10 GB free needed during a rebuild) |
+| `/opt/popmap` | checkout of this repository, with a venv in `.venv/` |
+| `/var/www/popmap` | web root: site code + generated `tiles/` and `data/` |
+| `/var/lib/popmap` | downloads, lock file and `update.log` |
 
-The tile build needs about 4 GB of RAM; ~15 GB of free disk in total covers a rebuild.
-
-1. Install the packages and create a service user:
+1. Get the code and install the dependencies:
    ```bash
-   sudo apt install git nginx certbot python3-certbot-nginx python3-venv rsync
-   sudo useradd --system --home /var/lib/popmap --shell /usr/sbin/nologin popmap
-   sudo mkdir -p /opt/popmap /var/www/popmap /var/lib/popmap
-   sudo chown popmap: /opt/popmap /var/www/popmap /var/lib/popmap
+   git clone <repo-url> /opt/popmap
+   cd /opt/popmap
+   python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
    ```
-2. Check out the code and install the Python dependencies:
+2. Copy the site code to the web root and build the data once:
    ```bash
-   sudo -u popmap git clone <repo-url> /opt/popmap
-   sudo -u popmap python3 -m venv /opt/popmap/.venv
-   sudo -u popmap /opt/popmap/.venv/bin/pip install -r /opt/popmap/requirements.txt
+   ./deploy/deploy.sh /var/www/popmap
+   ./deploy/update-data.sh
    ```
-3. Publish the site code and build the data for the first time (download + build, a few minutes):
-   ```bash
-   sudo -u popmap /opt/popmap/deploy/deploy.sh /var/www/popmap
-   sudo -u popmap /opt/popmap/deploy/update-data.sh
+3. Schedule the data updates with cron, weekly or monthly. Either install
+   `deploy/popmap-update.cron` in `/etc/cron.d/` (set the user and path in it), or add
+   this to a crontab:
    ```
-4. Schedule the updates. The cron file runs weekly; edit it for monthly:
-   ```bash
-   sudo install -m 644 /opt/popmap/deploy/popmap-update.cron /etc/cron.d/popmap-update
+   17 4 * * 1  /opt/popmap/deploy/update-data.sh > /dev/null
    ```
-5. Put `deploy/nginx-popmap.conf` in `/etc/nginx/sites-available/popmap`, set `server_name` and enable the site:
-   `sudo ln -s /etc/nginx/sites-available/popmap /etc/nginx/sites-enabled/ && sudo nginx -t && sudo systemctl reload nginx`
-6. Request an HTTPS certificate: `sudo certbot --nginx -d yourdomain.com`.
+4. Point your web server at `/var/www/popmap`. `deploy/nginx-popmap.conf` is an example
+   config for nginx; with any other server, serve `meta.json` and `countries.json` with
+   `Cache-Control: no-cache`. Use HTTPS for public access.
 
-### Code updates
+The user running the scripts needs write access to the web root and the work dir.
+Paths can be changed with `POPMAP_WEB_DIR`, `POPMAP_WORK_DIR`, `POPMAP_VENV` and
+`POPMAP_LOG` (environment variables or `/etc/default/popmap`).
 
-```bash
-cd /opt/popmap && sudo -u popmap git pull && sudo -u popmap ./deploy/deploy.sh /var/www/popmap
-```
-
-`deploy.sh` leaves `tiles/` and `data/countries.json` alone. You can also push the code
-from your own machine with `./deploy/deploy.sh user@server`.
+**Code updates:** `git pull && ./deploy/deploy.sh /var/www/popmap`. This leaves the
+generated data alone. From another machine: `./deploy/deploy.sh user@server [/path/to/webroot]`.
 
 ### How the data updates work
 
@@ -119,23 +110,16 @@ for the newest `kontur_population_YYYYMMDD.gpkg.gz` and compares it with `versio
 API call and refresh `countries.json`. When there is a new release it:
 
 1. downloads it to the work dir (resumes if interrupted),
-2. builds the tiles into `/var/www/popmap/tiles-<version>/`,
+2. builds the tiles into `<web root>/tiles-<version>/`,
 3. switches the `tiles` symlink to the new folder atomically and deletes the old one.
 
 The live site is never touched by a run that fails halfway. Tile URLs carry
-`?v=<version>` and `meta.json` is served with `no-cache`, so visitors get the new data
-straight away even though tiles are cached for 30 days.
-
-Useful commands:
+`?v=<version>`, so visitors get the new data straight away even if tiles are cached.
 
 ```bash
-sudo -u popmap /opt/popmap/deploy/update-data.sh --check   # exit code 10 = update available
-sudo -u popmap /opt/popmap/deploy/update-data.sh --force   # rebuild anyway
-tail -f /var/lib/popmap/update.log
+./deploy/update-data.sh --check   # exit code 10 = update available
+./deploy/update-data.sh --force   # rebuild anyway
 ```
-
-Paths can be changed with `POPMAP_WEB_DIR`, `POPMAP_WORK_DIR`, `POPMAP_VENV` and
-`POPMAP_LOG` in `/etc/default/popmap`.
 
 ### Notes for public use
 

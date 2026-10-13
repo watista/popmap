@@ -7,6 +7,7 @@
 /web/data/*.tmp
 # Kontur source downloads and unpacked GeoPackages
 /data/
+/work/
 *.gpkg
 *.gpkg.gz
 *.part

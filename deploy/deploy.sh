@@ -4,7 +4,7 @@
 # it itself with deploy/update-data.sh, and existing data there is left untouched.
 #
 #   On the server, after a git pull:   ./deploy/deploy.sh /var/www/popmap
-#   From your own machine (WSL):       ./deploy/deploy.sh user@server [/var/www/popmap]
+#   From another machine:              ./deploy/deploy.sh user@server [/var/www/popmap]
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"

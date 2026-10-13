@@ -11,8 +11,8 @@ Variants ("number of spikes") use a coarser H3 resolution per zoom: fewer, fulle
 Each web-mercator zoom gets an H3 resolution so that a tile holds at most ~50k hexagons.
 Hexagons are assigned to a tile by their centre point.
 
-Usage (in WSL):
-  python build_tiles.py --gpkg ~/popmap-work/kontur_population_20231101.gpkg --out ../web
+Usage:
+  python build_tiles.py --gpkg path/to/kontur_population_YYYYMMDD.gpkg --out ../web
   (the dataset date is read from the file name; pass --version YYYYMMDD otherwise)
 """
 import argparse
